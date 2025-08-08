@@ -1,0 +1,20 @@
+clean:
+  remove_selectors:
+    - ".mw-editsection"
+    - ".portable-infobox"
+    - "script"
+    - "style"
+    - "nav"
+    - "header"
+    - "footer"
+chunking:
+  size: ${CHUNK_SIZE}
+  overlap: ${CHUNK_OVERLAP}
+metadata:
+  keep:
+    - title
+    - url
+    - last_modified
+    - source_collection
+    - category
+    - page_type

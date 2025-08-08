@@ -1,0 +1,36 @@
+collections:
+  - name: official
+    recency_boost: true
+    max_pages: 400
+    allow_patterns:
+      - "warframe.com/news"
+      - "forums.warframe.com/topic/"
+      - "store.steampowered.com/news/app/230410"
+    urls:
+      - https://www.warframe.com/news
+      - https://forums.warframe.com/forum/3-announcements/
+      - https://forums.warframe.com/forum/123-developer-workshop/
+      - https://store.steampowered.com/news/app/230410?updates=true
+
+  - name: wiki_core
+    note: "Fandom Warframe Wiki is CC BY-SA; keep URLs for attribution."
+    max_pages: 2500
+    allow_patterns:
+      - "warframe.fandom.com/wiki/"
+    urls:
+      - https://warframe.fandom.com/wiki/Weapons
+      - https://warframe.fandom.com/wiki/Mods
+      - https://warframe.fandom.com/wiki/Arcanes
+      - https://warframe.fandom.com/wiki/Warframes
+      - https://warframe.fandom.com/wiki/Companions
+      - https://warframe.fandom.com/wiki/Enemies
+      - https://warframe.fandom.com/wiki/Missions
+      - https://warframe.fandom.com/wiki/Relics
+      - https://warframe.fandom.com/wiki/Resources
+      - https://warframe.fandom.com/wiki/Drops
+      - https://warframe.fandom.com/wiki/Quests
+      - https://warframe.fandom.com/wiki/Syndicates
+      - https://warframe.fandom.com/wiki/Damage
+      - https://warframe.fandom.com/wiki/Critical_Chance
+      - https://warframe.fandom.com/wiki/Status_Effect
+      - https://warframe.fandom.com/wiki/Riven_Mods

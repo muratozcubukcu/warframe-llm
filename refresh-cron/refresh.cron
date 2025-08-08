@@ -1,0 +1,1 @@
+30 3 * * * /usr/local/bin/python /api/app.py --ingest /ingest/sources.yaml --rules /ingest/rules.yaml

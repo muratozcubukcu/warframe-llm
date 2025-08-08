@@ -1,0 +1,77 @@
+version: "3.9"
+
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: unless-stopped
+    ports:
+      - "${QDRANT_HTTP_PORT}:6333"
+    volumes:
+      - ./data/qdrant:/qdrant/storage
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT}:11434"
+    volumes:
+      - ./models/ollama:/root/.ollama
+
+  api:
+    image: python:3.11-slim
+    container_name: warframe-rag-api
+    restart: unless-stopped
+    depends_on: [qdrant, ollama]
+    working_dir: /app
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - OLLAMA_URL=http://ollama:11434
+      - TOP_K=${TOP_K}
+      - CHUNK_SIZE=${CHUNK_SIZE}
+      - CHUNK_OVERLAP=${CHUNK_OVERLAP}
+      - RECENCY_BOOST_DAYS=${RECENCY_BOOST_DAYS}
+      - EMBED_MODEL=${EMBED_MODEL}
+      - GEN_MODEL=${GEN_MODEL}
+      - COLLECTION=${COLLECTION}
+    volumes:
+      - ./api:/app
+    command: |
+      bash -lc "apt-get update && apt-get install -y build-essential && \
+      pip install -r requirements.txt && \
+      python -m uvicorn app:app --host 0.0.0.0 --port ${RAG_API_PORT}"
+    ports:
+      - "${RAG_API_PORT}:${RAG_API_PORT}"
+
+  ingestor:
+    image: python:3.11-slim
+    container_name: warframe-ingestor
+    depends_on: [qdrant, ollama, api]
+    working_dir: /work
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - OLLAMA_URL=http://ollama:11434
+      - EMBED_MODEL=${EMBED_MODEL}
+      - CHUNK_SIZE=${CHUNK_SIZE}
+      - CHUNK_OVERLAP=${CHUNK_OVERLAP}
+      - COLLECTION=${COLLECTION}
+    volumes:
+      - ./ingest:/work/ingest
+      - ./api:/work/api
+    command: |
+      bash -lc "apt-get update && apt-get install -y build-essential && \
+      pip install -r /work/api/requirements.txt && \
+      python /work/api/app.py --ingest /work/ingest/sources.yaml --rules /work/ingest/rules.yaml"
+    restart: "no"
+
+  refresh:
+    image: ghcr.io/aptible/supercronic:latest
+    container_name: warframe-refresh
+    depends_on: [qdrant, ollama, api]
+    volumes:
+      - ./ingest:/ingest
+      - ./api:/api
+      - ./refresh-cron:/cron
+    entrypoint: ["/usr/local/bin/supercronic", "/cron/refresh.cron"]
+    restart: unless-stopped
