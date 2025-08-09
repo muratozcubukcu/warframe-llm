@@ -45,23 +45,15 @@ services:
     ports:
       - "${RAG_API_PORT:-8088}:${RAG_API_PORT:-8088}"
 
-  ingestor:
+  warframe-ingestor:
     image: python:3.11-slim
     container_name: warframe-ingestor
-    depends_on: [qdrant]
-    working_dir: /api
-    environment:
-      - QDRANT_URL=http://qdrant:6333
-      - EMBED_MODEL=${EMBED_MODEL:-BAAI/bge-small-en-v1.5}
-      - CHUNK_SIZE=${CHUNK_SIZE:-900}
-      - CHUNK_OVERLAP=${CHUNK_OVERLAP:-150}
-      - COLLECTION=${COLLECTION:-warframe}
+    working_dir: /app
     volumes:
-      - ./api:/api
-      - ./ingest:/ingest
-      - ./rules.yaml:/rules.yaml:ro
+      - ./api:/app/api
+      - ./ingest:/app/ingest
     command: >
-      bash -lc "pip install --no-cache-dir -r /api/requirements.txt &&
-                python /api/app.py --ingest /ingest/sources.yaml --rules /rules.yaml"
-    restart: "no"
+      sh -c "pip install --no-cache-dir -r /app/api/requirements.txt &&
+            python /app/api/app.py"
+
 
