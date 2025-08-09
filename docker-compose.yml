@@ -18,11 +18,12 @@ services:
       - ./models/ollama:/root/.ollama
 
   api:
-    image: python:3.11-slim
+    build:
+      context: ./api
+    image: warframe-api:local        # local image built by Portainer
     container_name: warframe-rag-api
     restart: unless-stopped
     depends_on: [qdrant, ollama]
-    working_dir: /api
     environment:
       - QDRANT_URL=http://qdrant:6333
       - OLLAMA_URL=http://ollama:11434
@@ -33,19 +34,15 @@ services:
       - EMBED_MODEL=${EMBED_MODEL:-BAAI/bge-small-en-v1.5}
       - GEN_MODEL=${GEN_MODEL:-llama3.1:8b-instruct-q4_K_M}
       - COLLECTION=${COLLECTION:-warframe}
-    volumes:
-      - ./api:/api
-    command: >
-      bash -lc "pip install --no-cache-dir -r /api/requirements.txt &&
-                python -m uvicorn app:app --host 0.0.0.0 --port ${RAG_API_PORT:-8088}"
     ports:
-      - "${RAG_API_PORT:-8088}:${RAG_API_PORT:-8088}"
+      - "${RAG_API_PORT:-8088}:8088"
 
   ingestor:
-    image: python:3.11-slim
+    build:
+      context: ./api                 # reuse the same code+deps image
+    image: warframe-api:local
     container_name: warframe-ingestor
     depends_on: [qdrant]
-    working_dir: /api
     environment:
       - QDRANT_URL=http://qdrant:6333
       - EMBED_MODEL=${EMBED_MODEL:-BAAI/bge-small-en-v1.5}
@@ -53,10 +50,8 @@ services:
       - CHUNK_OVERLAP=${CHUNK_OVERLAP:-150}
       - COLLECTION=${COLLECTION:-warframe}
     volumes:
-      - ./api:/api
-      - ./ingest:/ingest
+      - ./ingest:/ingest:ro
       - ./rules.yaml:/rules.yaml:ro
-    command: >
-      bash -lc "pip install --no-cache-dir -r /api/requirements.txt &&
-                python /api/app.py --ingest /ingest/sources.yaml --rules /rules.yaml"
+    # override the default CMD to run ingestion
+    command: ["python", "/app/app.py", "--ingest", "/ingest/sources.yaml", "--rules", "/rules.yaml"]
     restart: "no"
