@@ -6,7 +6,7 @@ services:
     container_name: qdrant
     restart: unless-stopped
     ports:
-      - "${QDRANT_HTTP_PORT}:6333"
+      - "${QDRANT_HTTP_PORT:-6333}:6333"
     volumes:
       - ./data/qdrant:/qdrant/storage
 
@@ -15,7 +15,7 @@ services:
     container_name: ollama
     restart: unless-stopped
     ports:
-      - "${OLLAMA_PORT}:11434"
+      - "${OLLAMA_PORT:-11434}:11434"
     volumes:
       - ./models/ollama:/root/.ollama
 
@@ -28,51 +28,56 @@ services:
     environment:
       - QDRANT_URL=http://qdrant:6333
       - OLLAMA_URL=http://ollama:11434
-      - TOP_K=${TOP_K}
-      - CHUNK_SIZE=${CHUNK_SIZE}
-      - CHUNK_OVERLAP=${CHUNK_OVERLAP}
-      - RECENCY_BOOST_DAYS=${RECENCY_BOOST_DAYS}
-      - EMBED_MODEL=${EMBED_MODEL}
-      - GEN_MODEL=${GEN_MODEL}
-      - COLLECTION=${COLLECTION}
+      - RAG_API_PORT=${RAG_API_PORT:-8088}
+      - TOP_K=${TOP_K:-8}
+      - CHUNK_SIZE=${CHUNK_SIZE:-900}
+      - CHUNK_OVERLAP=${CHUNK_OVERLAP:-150}
+      - EMBED_MODEL=${EMBED_MODEL:-BAAI/bge-small-en-v1.5}
+      - GEN_MODEL=${GEN_MODEL:-llama3.1:8b-instruct-q4_K_M}
+      - COLLECTION=${COLLECTION:-warframe}
     volumes:
       - ./api:/app
-    command: |
-      bash -lc "apt-get update && apt-get install -y build-essential && \
-      pip install -r requirements.txt && \
-      python -m uvicorn app:app --host 0.0.0.0 --port ${RAG_API_PORT}"
+    command: >
+      bash -lc "
+        apt-get update &&
+        apt-get install -y --no-install-recommends build-essential &&
+        pip install -r requirements.txt &&
+        python /app/app.py
+      "
     ports:
-      - "${RAG_API_PORT}:${RAG_API_PORT}"
+      - "${RAG_API_PORT:-8088}:${RAG_API_PORT:-8088}"
 
   ingestor:
     image: python:3.11-slim
     container_name: warframe-ingestor
-    depends_on: [qdrant, ollama, api]
+    depends_on: [qdrant, ollama]
     working_dir: /work
     environment:
       - QDRANT_URL=http://qdrant:6333
       - OLLAMA_URL=http://ollama:11434
-      - EMBED_MODEL=${EMBED_MODEL}
-      - CHUNK_SIZE=${CHUNK_SIZE}
-      - CHUNK_OVERLAP=${CHUNK_OVERLAP}
-      - COLLECTION=${COLLECTION}
+      - EMBED_MODEL=${EMBED_MODEL:-BAAI/bge-small-en-v1.5}
+      - CHUNK_SIZE=${CHUNK_SIZE:-900}
+      - CHUNK_OVERLAP=${CHUNK_OVERLAP:-150}
+      - COLLECTION=${COLLECTION:-warframe}
     volumes:
-      - ./ingest:/work/ingest
-      - ./api:/work/api
-    command: |
-      bash -lc "apt-get update && apt-get install -y build-essential && \
-      pip install -r /work/api/requirements.txt && \
-      python /work/api/app.py --ingest /work/ingest/sources.yaml --rules /work/ingest/rules.yaml"
+      - ./:/work           # gives access to /work/api/app.py, /work/ingest, /work/rules.yaml
+    command: >
+      bash -lc "
+        apt-get update &&
+        apt-get install -y --no-install-recommends build-essential &&
+        pip install -r /work/api/requirements.txt &&
+        python /work/api/app.py --ingest /work/ingest/sources.yaml --rules /work/rules.yaml
+      "
     restart: "no"
 
+  # Optional nightly refresh (no auth needed)
   refresh:
-    image: herliansyah/supercronic:3.0   # wraps Supercronic v0.2.33
+    image: umputun/supercronic:latest
     container_name: warframe-refresh
     depends_on: [qdrant, ollama, api]
     volumes:
       - ./ingest:/ingest
       - ./api:/api
       - ./refresh-cron:/cron
-    entrypoint: ["/usr/local/bin/supercronic", "/cron/refresh.cron"]
+    entrypoint: ["/supercronic", "/cron/refresh.cron"]
     restart: unless-stopped
-
