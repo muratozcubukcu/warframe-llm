@@ -17,49 +17,53 @@ services:
     volumes:
       - ./models/ollama:/root/.ollama
 
-  api:
-    image: python:3.11-slim
-    container_name: warframe-rag-api
-    restart: unless-stopped
-    depends_on: [qdrant, ollama]
-    working_dir: /app
-    environment:
-      - QDRANT_URL=http://qdrant:6333
-      - OLLAMA_URL=http://ollama:11434
-      - RAG_API_PORT=${RAG_API_PORT:-8088}
-      - TOP_K=${TOP_K:-8}
-      - CHUNK_SIZE=${CHUNK_SIZE:-900}
-      - CHUNK_OVERLAP=${CHUNK_OVERLAP:-150}
-      - EMBED_MODEL=${EMBED_MODEL:-BAAI/bge-small-en-v1.5}
-      - GEN_MODEL=${GEN_MODEL:-llama3.1:8b-instruct-q4_K_M}
-      - COLLECTION=${COLLECTION:-warframe}
-    volumes:
-      - ./api:/app
-    command: >
-      bash -lc "
-        apt-get update &&
-        apt-get install -y --no-install-recommends build-essential &&
-        pip install --no-cache-dir -r requirements.txt &&
-        python -m uvicorn app:app --host 0.0.0.0 --port ${RAG_API_PORT:-8088}
-      "
-    ports:
-      - "${RAG_API_PORT:-8088}:${RAG_API_PORT:-8088}"
+api:
+  image: python:3.11-slim
+  container_name: warframe-rag-api
+  restart: unless-stopped
+  depends_on: [qdrant, ollama]
+  working_dir: /api
+  environment:
+    - QDRANT_URL=http://qdrant:6333
+    - OLLAMA_URL=http://ollama:11434
+    - RAG_API_PORT=${RAG_API_PORT:-8088}
+    - TOP_K=${TOP_K:-8}
+    - CHUNK_SIZE=${CHUNK_SIZE:-900}
+    - CHUNK_OVERLAP=${CHUNK_OVERLAP:-150}
+    - EMBED_MODEL=${EMBED_MODEL:-BAAI/bge-small-en-v1.5}
+    - GEN_MODEL=${GEN_MODEL:-llama3.1:8b-instruct-q4_K_M}
+    - COLLECTION=${COLLECTION:-warframe}
+  volumes:
+    - ./api:/api              # <<< mount at /api (not /app)
+  command: >
+    bash -lc "apt-get update &&
+              apt-get install -y --no-install-recommends build-essential &&
+              pip install --no-cache-dir -r requirements.txt &&
+              python -m uvicorn app:app --host 0.0.0.0 --port ${RAG_API_PORT:-8088}"
+  ports:
+    - "${RAG_API_PORT:-8088}:${RAG_API_PORT:-8088}"
 
-  ingestor:
-    image: python:3.11-slim
-    container_name: warframe-ingestor
-    depends_on: [qdrant]
-    working_dir: /app
-    environment:
-      - QDRANT_URL=http://qdrant:6333
-      - EMBED_MODEL=BAAI/bge-small-en-v1.5
-      - CHUNK_SIZE=900
-      - CHUNK_OVERLAP=150
-      - COLLECTION=warframe
-    volumes:
-      - ./:/app
-    command: bash -lc "pip install --no-cache-dir fastapi==0.112.0 uvicorn[standard]==0.30.0 httpx==0.27.0 pydantic==2.8.2 qdrant-client==1.9.1 sentence-transformers==3.0.1 torch==2.3.1 beautifulsoup4==4.12.3 readability-lxml==0.8.1 trafilatura==1.7.0 lxml==5.2.2 markdownify==0.12.1 python-frontmatter==1.0.1 python-dateutil==2.9.0.post0 numpy==2.0.1 scikit-learn==1.5.1 orjson==3.10.7 pyyaml==6.0.2 && python /app/api/app.py --ingest /app/ingest/sources.yaml --rules /app/rules.yaml"
-    restart: "no"
+ingestor:
+  image: python:3.11-slim
+  container_name: warframe-ingestor
+  depends_on: [qdrant]
+  working_dir: /api
+  environment:
+    - QDRANT_URL=http://qdrant:6333
+    - EMBED_MODEL=${EMBED_MODEL:-BAAI/bge-small-en-v1.5}
+    - CHUNK_SIZE=${CHUNK_SIZE:-900}
+    - CHUNK_OVERLAP=${CHUNK_OVERLAP:-150}
+    - COLLECTION=${COLLECTION:-warframe}
+  volumes:
+    - ./api:/api              # <<< mount at /api (not /app)
+    - ./ingest:/ingest
+    - ./rules.yaml:/rules.yaml:ro
+  command: >
+    bash -lc "apt-get update &&
+              apt-get install -y --no-install-recommends build-essential &&
+              pip install --no-cache-dir -r /api/requirements.txt &&
+              python /api/app.py --ingest /ingest/sources.yaml --rules /rules.yaml"
+  restart: "no"
 
 
 
