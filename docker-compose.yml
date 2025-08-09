@@ -56,15 +56,14 @@ services:
       - CHUNK_SIZE=${CHUNK_SIZE:-900}
       - CHUNK_OVERLAP=${CHUNK_OVERLAP:-150}
       - COLLECTION=${COLLECTION:-warframe}
+    # Mount the WHOLE repo to /app so paths line up
     volumes:
-      - ./api:/app
-      - ./ingest:/ingest
-      - ./rules.yaml:/rules.yaml:ro
+      - ./:/app
     command: >
       bash -lc "
         apt-get update &&
         apt-get install -y --no-install-recommends build-essential &&
-        pip install --no-cache-dir -r /app/requirements.txt &&
-        python /app/app.py --ingest /ingest/sources.yaml --rules /rules.yaml
+        pip install --no-cache-dir -r /app/api/requirements.txt &&
+        python /app/api/app.py --ingest /app/ingest/sources.yaml --rules /app/rules.yaml
       "
     restart: "no"
