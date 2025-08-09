@@ -37,6 +37,7 @@ services:
       - COLLECTION=${COLLECTION:-warframe}
     volumes:
       - ./api:/app
+    # run the server directly (no module import gotchas)
     command: >
       bash -lc "
         apt-get update &&
@@ -47,20 +48,20 @@ services:
     ports:
       - "${RAG_API_PORT:-8088}:${RAG_API_PORT:-8088}"
 
+  # one-shot ingestion runs on deploy, then exits
   ingestor:
     image: python:3.11-slim
     container_name: warframe-ingestor
-    depends_on: [qdrant, ollama]
+    depends_on: [qdrant]
     working_dir: /work
     environment:
       - QDRANT_URL=http://qdrant:6333
-      - OLLAMA_URL=http://ollama:11434
       - EMBED_MODEL=${EMBED_MODEL:-BAAI/bge-small-en-v1.5}
       - CHUNK_SIZE=${CHUNK_SIZE:-900}
       - CHUNK_OVERLAP=${CHUNK_OVERLAP:-150}
       - COLLECTION=${COLLECTION:-warframe}
     volumes:
-      - ./:/work           # gives access to /work/api/app.py, /work/ingest, /work/rules.yaml
+      - ./:/work
     command: >
       bash -lc "
         apt-get update &&
@@ -69,15 +70,3 @@ services:
         python /work/api/app.py --ingest /work/ingest/sources.yaml --rules /work/rules.yaml
       "
     restart: "no"
-
-  # Optional nightly refresh (no auth needed)
-  refresh:
-    image: umputun/supercronic:latest
-    container_name: warframe-refresh
-    depends_on: [qdrant, ollama, api]
-    volumes:
-      - ./ingest:/ingest
-      - ./api:/api
-      - ./refresh-cron:/cron
-    entrypoint: ["/supercronic", "/cron/refresh.cron"]
-    restart: unless-stopped
