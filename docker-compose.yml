@@ -3,7 +3,6 @@ version: "3.9"
 services:
   qdrant:
     image: qdrant/qdrant:latest
-    container_name: qdrant
     restart: unless-stopped
     ports:
       - "${QDRANT_HTTP_PORT:-6333}:6333"
@@ -12,19 +11,21 @@ services:
 
   ollama:
     image: ollama/ollama:latest
-    container_name: ollama
     restart: unless-stopped
     ports:
       - "${OLLAMA_PORT:-11434}:11434"
     volumes:
       - ./models/ollama:/root/.ollama
 
+  # Build the API image once; no bind mounts to /app
   api:
-    image: python:3.11-slim
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    image: warframe-api:latest
     container_name: warframe-rag-api
     restart: unless-stopped
     depends_on: [qdrant, ollama]
-    working_dir: /app
     environment:
       - QDRANT_URL=http://qdrant:6333
       - OLLAMA_URL=http://ollama:11434
@@ -35,25 +36,14 @@ services:
       - EMBED_MODEL=${EMBED_MODEL:-BAAI/bge-small-en-v1.5}
       - GEN_MODEL=${GEN_MODEL:-llama3.1:8b-instruct-q4_K_M}
       - COLLECTION=${COLLECTION:-warframe}
-    volumes:
-      - ./api:/app
-    # run the server directly (no module import gotchas)
-    command: >
-      bash -lc "
-        apt-get update &&
-        apt-get install -y --no-install-recommends build-essential &&
-        pip install -r requirements.txt &&
-        python /app/app.py
-      "
     ports:
       - "${RAG_API_PORT:-8088}:${RAG_API_PORT:-8088}"
 
-  # one-shot ingestion runs on deploy, then exits
+  # Ingestor reuses the same built image; only mount data inputs
   ingestor:
-    image: python:3.11-slim
+    image: warframe-api:latest
     container_name: warframe-ingestor
     depends_on: [qdrant]
-    working_dir: /app
     environment:
       - QDRANT_URL=http://qdrant:6333
       - EMBED_MODEL=${EMBED_MODEL:-BAAI/bge-small-en-v1.5}
@@ -61,15 +51,8 @@ services:
       - CHUNK_OVERLAP=${CHUNK_OVERLAP:-150}
       - COLLECTION=${COLLECTION:-warframe}
     volumes:
-      - ./api:/app
-      - ./ingest:/ingest
+      - ./ingest:/ingest:ro
       - ./rules.yaml:/rules.yaml:ro
     command: >
-      bash -lc "
-        apt-get update &&
-        apt-get install -y --no-install-recommends build-essential &&
-        pip install -r /app/requirements.txt &&
-        python /app/app.py --ingest /ingest/sources.yaml --rules /rules.yaml
-      "
+      bash -lc "python /app/app.py --ingest /ingest/sources.yaml --rules /rules.yaml"
     restart: "no"
-
