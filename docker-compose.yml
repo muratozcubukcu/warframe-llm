@@ -17,15 +17,12 @@ services:
     volumes:
       - ./models/ollama:/root/.ollama
 
-  # Build the API image once; no bind mounts to /app
   api:
-    build:
-      context: ./api
-      dockerfile: Dockerfile
-    image: warframe-api:latest
+    image: python:3.11-slim
     container_name: warframe-rag-api
     restart: unless-stopped
     depends_on: [qdrant, ollama]
+    working_dir: /app
     environment:
       - QDRANT_URL=http://qdrant:6333
       - OLLAMA_URL=http://ollama:11434
@@ -36,14 +33,23 @@ services:
       - EMBED_MODEL=${EMBED_MODEL:-BAAI/bge-small-en-v1.5}
       - GEN_MODEL=${GEN_MODEL:-llama3.1:8b-instruct-q4_K_M}
       - COLLECTION=${COLLECTION:-warframe}
+    volumes:
+      - ./api:/app
+    command: >
+      bash -lc "
+        apt-get update &&
+        apt-get install -y --no-install-recommends build-essential &&
+        pip install --no-cache-dir -r requirements.txt &&
+        python -m uvicorn app:app --host 0.0.0.0 --port ${RAG_API_PORT:-8088}
+      "
     ports:
       - "${RAG_API_PORT:-8088}:${RAG_API_PORT:-8088}"
 
-  # Ingestor reuses the same built image; only mount data inputs
   ingestor:
-    image: warframe-api:latest
+    image: python:3.11-slim
     container_name: warframe-ingestor
     depends_on: [qdrant]
+    working_dir: /app
     environment:
       - QDRANT_URL=http://qdrant:6333
       - EMBED_MODEL=${EMBED_MODEL:-BAAI/bge-small-en-v1.5}
@@ -51,8 +57,14 @@ services:
       - CHUNK_OVERLAP=${CHUNK_OVERLAP:-150}
       - COLLECTION=${COLLECTION:-warframe}
     volumes:
-      - ./ingest:/ingest:ro
+      - ./api:/app
+      - ./ingest:/ingest
       - ./rules.yaml:/rules.yaml:ro
     command: >
-      bash -lc "python /app/app.py --ingest /ingest/sources.yaml --rules /rules.yaml"
+      bash -lc "
+        apt-get update &&
+        apt-get install -y --no-install-recommends build-essential &&
+        pip install --no-cache-dir -r /app/requirements.txt &&
+        python /app/app.py --ingest /ingest/sources.yaml --rules /rules.yaml
+      "
     restart: "no"
